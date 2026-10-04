@@ -73,6 +73,59 @@
     else if (has('kalus')) { wagner = 0; priority = 'Rendah'; }
     return { wagner, priority };
   }
+
+  // ---------- Pemantauan penyembuhan 4 minggu (jalur tren) ----------
+  // Patokan klinis: ulkus kaki diabetik yang luasnya tidak turun ≥ 50% dalam 4 minggu perawatan
+  // standar kemungkinan besar tidak sembuh dalam 12 minggu (Sheehan dkk., Diabetes Care 2003; IWGDF).
+  // Ambang "waspada" di minggu ke-1–3 adalah aturan tim (belum baku) dan perlu divalidasi klinis.
+  const HEAL = { weeks: 4, goal: 0.5, warnRatio: 0.5 };
+  const targetRed = w => HEAL.goal * Math.min(Math.max(w, 0), HEAL.weeks) / HEAL.weeks;
+  const WEEK = 7 * 864e5;
+  function healStatus(a0, a, w) {
+    const red = 1 - a / a0, tgt = targetRed(w);
+    if (w < 0.5) return 'awal';
+    if (w >= HEAL.weeks - 0.5) return red >= HEAL.goal ? 'tercapai' : 'rujuk';
+    if (a > a0) return 'waspada';
+    if (w >= 1.5 && red < tgt * HEAL.warnRatio) return 'waspada';
+    return 'sesuai';
+  }
+  // Jalur tren: pindaian mingguan (bukan laporan keluhan) dengan luas luka, pada kaki pindaian terakhir.
+  function healTrack(scans) {
+    const trend = scans.filter(s => s.area && !s.urgent);
+    if (!trend.length) return null;
+    const lastScan = trend[trend.length - 1];
+    const ep = trend.filter(s => s.foot === lastScan.foot);
+    const t0 = new Date(ep[0].date).getTime(), a0 = ep[0].area;
+    const pts = ep.map(s => {
+      const w = (new Date(s.date).getTime() - t0) / WEEK;
+      return { id: s.id, d: s.date, v: s.area, w, wk: Math.round(w), red: 1 - s.area / a0, tgt: targetRed(w), status: healStatus(a0, s.area, w) };
+    });
+    const last = pts[pts.length - 1];
+    const next = new Date(t0 + (last.wk + 1) * WEEK);
+    return { foot: lastScan.foot, site: lastScan.site, a0, base: ep[0].date, pts, last, week: last.wk, status: last.status, next, nextWeek: last.wk + 1 };
+  }
+  const HEAL_INFO = {
+    awal: { chip: 't-blue', label: 'Target dibuat', tone: 'green', order: 3,
+      msg: 'Foto awal tercatat. Sistem membuat target penyembuhan untuk 4 minggu ke depan. Pindai lagi minggu depan di hari yang sama.' },
+    sesuai: { chip: 't-green', label: 'Sesuai target', tone: 'green', order: 2,
+      msg: 'Luka mengecil sesuai target. Lanjutkan perawatan dan pindai lagi minggu depan di hari yang sama.' },
+    waspada: { chip: 't-amber', label: 'Waspada', tone: 'amber', order: 1,
+      msg: 'Luka mengecil lebih lambat dari target. Disarankan kontrol ke Puskesmas minggu ini, tidak perlu menunggu minggu ke-4.' },
+    rujuk: { chip: 't-red', label: 'Disarankan rujuk', tone: 'red', order: 0,
+      msg: 'Dalam 4 minggu luas luka turun kurang dari 50%. Sistem menyarankan rujukan ke rumah sakit; tenaga kesehatan akan menindaklanjuti.' },
+    tercapai: { chip: 't-green', label: 'Patokan tercapai', tone: 'green', order: 4,
+      msg: 'Luas luka turun ≥ 50% dalam 4 minggu, sesuai patokan penyembuhan. Lanjutkan perawatan sampai luka menutup.' },
+  };
+
+  // ---------- Jalur darurat (bisa kapan saja, tidak dihitung dalam tren) ----------
+  const DANGER_SIGNS = ['Luka berbau tidak sedap', 'Keluar nanah atau cairan keruh', 'Kemerahan di sekitar luka meluas', 'Kaki bengkak atau terasa panas', 'Demam atau menggigil', 'Kulit di sekitar luka menghitam'];
+  function urgentCheck(symptoms, dets) {
+    const signs = symptoms.slice();
+    if (dets.some(d => d.cls === 'infeksi')) signs.push('AI: tanda infeksi (kemerahan) pada foto');
+    if (dets.some(d => d.cls === 'nekrosis')) signs.push('AI: jaringan menghitam (nekrosis) pada foto');
+    return { symptoms, signs, danger: signs.length > 0 };
+  }
+
   const ADVICE = {
     Tinggi: { tone: 'red', title: 'Perlu pemeriksaan segera.', text: 'Periksakan ke Puskesmas dalam 24 jam. Jangan menekan luka atau berjalan tanpa alas kaki.' },
     Sedang: { tone: 'amber', title: 'Luka perlu dirawat.', text: 'Bersihkan dan tutup luka dengan balutan bersih, kurangi tekanan pada kaki, lalu kirim hasil ini ke Puskesmas.' },
@@ -164,41 +217,41 @@
       const { wagner, priority } = assess(dets, area);
       scans.push({ id: 's' + (n++), patientId: pid, date, foot, site, image: { kind: 'scene', scene }, detections: dets, area, wagner, priority, status, sent: true, ms: 24 + (n * 7) % 19, ...extra });
     };
-    // Riwayat Budi: luka mengecil tiap minggu
-    const areas = [5.8, 5.4, 4.7, 4.1, 3.6];
-    areas.forEach((a, i) => add('p2', at(35 - i * 7, 7, 30 + i), 'Kanan', 'Metatarsal I', SCENES.budi(+Math.sqrt(a / 3.2).toFixed(3), i < 2), { ulkus: 0.9, infeksi: 0.78, kalus: 0.74 }, a, 'Divalidasi'));
-    // Antrean hari ini
-    add('p1', at(0, 6, 58), 'Kiri', 'Ibu jari', SCENES.siti(), { nekrosis: 0.88, ulkus: 0.79 }, 1.6, 'Menunggu');
-    add('p2', at(0, 7, 42), 'Kanan', 'Metatarsal I', SCENES.budi(1, true), { ulkus: 0.92, infeksi: 0.81, kalus: 0.76 }, 3.2, 'Menunggu');
-    add('p3', at(0, 8, 10), 'Kanan', 'Tumit', SCENES.hendra(), { ulkus: 0.86 }, 2.3, 'Menunggu');
-    add('p5', at(0, 8, 31), 'Kiri', 'Metatarsal V', SCENES.maria(), { kalus: 0.83 }, null, 'Menunggu');
-    add('p4', at(0, 8, 47), 'Kiri', 'Plantar tengah', SCENES.agus(), { ulkus: 0.84 }, 1.9, 'Menunggu');
-    add('p6', at(0, 9, 5), 'Kanan', 'Jari II', SCENES.dewi(), {}, null, 'Divalidasi');
-    // Riwayat mingguan pasien lain (sudah divalidasi)
-    const hist = [
-      ['p1', 'Kiri', 'Ibu jari', 3, w => ({ s: SCENES.siti(), c: w >= 3 ? { ulkus: 0.8 } : { nekrosis: 0.7, ulkus: 0.78 }, a: +(1.6 - w * 0.15).toFixed(1) })],
-      ['p3', 'Kanan', 'Tumit', 5, w => ({ s: SCENES.hendra(), c: { ulkus: 0.82 }, a: +(2.3 + w * 0.3).toFixed(1) })],
-      ['p4', 'Kiri', 'Plantar tengah', 4, w => ({ s: SCENES.agus(), c: { ulkus: 0.8 }, a: +(1.9 + w * 0.25).toFixed(1) })],
-      ['p5', 'Kiri', 'Metatarsal V', 3, () => ({ s: SCENES.maria(), c: { kalus: 0.8 }, a: null })],
-      ['p6', 'Kanan', 'Jari II', 2, () => ({ s: SCENES.dewi(), c: {}, a: null })],
-      ['p7', 'Kiri', 'Metatarsal III', 6, w => ({ s: SCENES.rahmat(), c: w >= 4 ? { ulkus: 0.84, infeksi: 0.72 } : { ulkus: 0.81 }, a: +(1.1 + w * 0.45).toFixed(1) })],
-      ['p8', 'Kanan', 'Tumit', 4, () => ({ s: SCENES.nur(), c: { kalus: 0.79 }, a: null })],
-    ];
-    hist.forEach(([pid, foot, site, count, gen], k) => {
-      for (let w = 1; w <= count; w++) {
-        const g = gen(w);
-        if (g.c.infeksi) g.s = { ...g.s, ery: true };
-        add(pid, at(w * 7 + (k % 3), 8 + (k % 3), 5 + k * 6), foot, site, g.s, g.c, g.a, 'Divalidasi');
-      }
+    // Episode pemantauan mingguan: luas luka per minggu sejak foto awal (minggu ke-0).
+    // Ukuran ulkus pada ilustrasi mengikuti luasnya. Pindaian hari ini masuk antrean (Menunggu).
+    const series = (pid, foot, site, startDaysAgo, areas, scene, conf, hh, mm) => areas.forEach((a, w) => {
+      const d = startDaysAgo - w * 7, c = conf(w);
+      let sc = scene(a, w);
+      if (sc.ulcer && pid !== 'p2') sc = { ...sc, ulcer: { ...sc.ulcer, s: +(sc.ulcer.s * Math.sqrt(a / areas[areas.length - 1])).toFixed(3) } };
+      if (c.infeksi) sc = { ...sc, ery: true };
+      add(pid, at(d, hh, mm + w), foot, site, sc, c, a, d === 0 ? 'Menunggu' : 'Divalidasi');
     });
+    // Budi (akun pasien demo): sempat sesuai target, lalu melambat → "Waspada" di minggu ke-3.
+    // Minggu ke-4 (titik keputusan) jatuh hari ini dan belum dipindai.
+    series('p2', 'Kanan', 'Metatarsal I', 28, [4.2, 3.9, 3.6, 3.5], a => SCENES.budi(+Math.sqrt(a / 3.2).toFixed(3), false), w => w === 0 ? { ulkus: 0.9, infeksi: 0.76, kalus: 0.74 } : { ulkus: 0.9, kalus: 0.74 }, 7, 30);
+    // Siti: luka membesar dan muncul nekrosis → "Waspada" (minggu ke-3).
+    series('p1', 'Kiri', 'Ibu jari', 21, [1.2, 1.3, 1.4, 1.6], (a, w) => w < 2 ? { ...SCENES.siti(), necro: null } : SCENES.siti(), w => w < 2 ? { ulkus: 0.78 } : { nekrosis: 0.88, ulkus: 0.79 }, 6, 55);
+    // Hendra: mengecil sesuai target (minggu ke-3).
+    series('p3', 'Kanan', 'Tumit', 21, [3.8, 3.2, 2.7, 2.3], () => SCENES.hendra(), () => ({ ulkus: 0.86 }), 8, 7);
+    // Agus: minggu ke-4 hanya turun 21% → "Disarankan rujuk".
+    series('p4', 'Kiri', 'Plantar tengah', 28, [2.4, 2.3, 2.2, 2.1, 1.9], () => SCENES.agus(), () => ({ ulkus: 0.84 }), 8, 44);
+    // Rahmat: sempat terinfeksi, setelah dirujuk turun 50% di minggu ke-4 → "Patokan tercapai".
+    series('p7', 'Kiri', 'Metatarsal III', 35, [3.0, 2.4, 1.9, 1.5, 1.2], () => SCENES.rahmat(), w => w < 2 ? { ulkus: 0.84, infeksi: 0.72 } : { ulkus: 0.81 }, 9, 12);
+    // Tanpa luka terbuka (tidak masuk jalur tren)
+    add('p5', at(0, 8, 31), 'Kiri', 'Metatarsal V', SCENES.maria(), { kalus: 0.83 }, null, 'Menunggu');
+    add('p6', at(0, 9, 5), 'Kanan', 'Jari II', SCENES.dewi(), {}, null, 'Divalidasi');
+    [['p5', 'Kiri', 'Metatarsal V', 3, SCENES.maria, { kalus: 0.8 }], ['p6', 'Kanan', 'Jari II', 2, SCENES.dewi, {}], ['p8', 'Kanan', 'Tumit', 4, SCENES.nur, { kalus: 0.79 }]]
+      .forEach(([pid, foot, site, count, scene, conf], k) => {
+        for (let w = 1; w <= count; w++) add(pid, at(w * 7 + k, 8 + k, 5 + k * 6), foot, site, scene(), conf, null, 'Divalidasi');
+      });
 
     return {
-      v: 1,
+      v: 2,
       me: 'p2',
       patients,
       scans,
       notes: [
-        { id: 'n1', patientId: 'p2', author: 'dr. Rina Pratiwi', text: 'Jaringan granulasi membaik. Lanjutkan balutan lembap, kurangi tekanan pada kaki kanan, dan kontrol sesuai jadwal.', date: at(1, 14, 20), read: true },
+        { id: 'n1', patientId: 'p2', author: 'dr. Rina Pratiwi', text: 'Luka mengecil lebih lambat dari target. Kurangi tekanan pada kaki kanan, ganti balutan setiap hari, dan pindai lagi tepat minggu depan. Bila minggu ke-4 belum turun separuh, kita bahas rujukan.', date: at(6, 14, 20), read: true },
       ],
       referrals: [
         { id: 'r1', patientId: 'p7', scanId: null, hospital: 'RSUD Kota Sukamaju', urgency: 'Terjadwal', reason: 'Evaluasi vaskular (dugaan penyakit arteri perifer)', date: at(30, 10, 0), status: 'Selesai' },
@@ -206,7 +259,7 @@
       corrections: [
         { date: at(1, 15, 5), patientId: 'p5', from: 'Ulkus', to: 'Kalus' },
         { date: at(1, 15, 4), patientId: 'p8', from: 'Ulkus', to: 'Kalus' },
-        { date: at(3, 10, 40), patientId: 'p7', from: '(tidak terdeteksi)', to: 'Tanda infeksi' },
+        { date: at(31, 10, 40), patientId: 'p7', from: '(tidak terdeteksi)', to: 'Tanda infeksi' },
       ],
       activity: [
         { icon: 'send', tone: 'teal', text: 'Kader Desa Mekarsari mengirim 2 pindaian', date: at(0, 8, 50) },
@@ -218,7 +271,7 @@
         { id: 'm2', text: 'Ganti balutan luka', time: '16.00', done: false },
         { id: 'm3', text: 'Minum Metformin 500 mg', time: '19.00', done: false },
       ],
-      vitals: { glucose: 168, glucoseAt: at(0, 6, 40), nextVisit: at(-8, 9, 0) },
+      vitals: { glucose: 168, glucoseAt: at(0, 6, 40), nextVisit: at(-2, 9, 0) },
       model: { version: 'YOLO11s-DFU v1.3', corrections: 46, threshold: 60, history: [
         { version: 'v1.3', date: at(21, 13, 0), note: 'Penambahan 312 citra lokal dari 4 Puskesmas' },
         { version: 'v1.2', date: at(63, 13, 0), note: 'Kelas "Nekrosis" dipisah dari "Ulkus"' },
@@ -230,5 +283,5 @@
 
   const HOSPITALS = ['RSUD Kota Sukamaju', 'RS Mitra Sehat', 'RS Bhakti Husada'];
 
-  global.DS = { I, ic, CLASSES, assess, ADVICE, footScene, sceneBoxes, SCENES, seed, HOSPITALS };
+  global.DS = { I, ic, CLASSES, assess, ADVICE, HEAL, healTrack, HEAL_INFO, DANGER_SIGNS, urgentCheck, footScene, sceneBoxes, SCENES, seed, HOSPITALS };
 })(window);

@@ -215,6 +215,31 @@ p { margin: 0; }
 .advice p { color: var(--ink-2); }
 .advice b { color: inherit; }
 .note-card { background: var(--accent-soft); border-radius: 16px; padding: 11px 12px; display: grid; gap: 8px; }
+/* Pemantauan penyembuhan 4 minggu + jalur darurat */
+.btn-warn { background: var(--red-soft); color: var(--red); white-space: normal; height: auto; min-height: 42px; padding: 8px 14px; text-align: center; }
+.btn-warn:hover { filter: brightness(.97); }
+.heal { padding: 16px 18px; border-radius: 20px; display: grid; gap: 12px; }
+.wk { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.wk span { display: grid; gap: 5px; font-size: 10.5px; font-weight: 700; color: var(--mut-2); text-align: center; }
+.wk i { display: block; height: 8px; border-radius: 999px; background: var(--sunken); }
+.wk .h-awal i, .wk .h-sesuai i { background: var(--accent-2); }
+.wk .h-tercapai i { background: var(--green); }
+.wk .h-waspada i { background: var(--amber); }
+.wk .h-rujuk i { background: var(--red); }
+.wk .miss i { background: repeating-linear-gradient(135deg, var(--sunken) 0 4px, var(--line) 4px 8px); }
+.wk .next i { background: transparent; box-shadow: inset 0 0 0 2px var(--accent-2); }
+.wk .next, .wk [class^="h-"] { color: var(--ink-2); }
+.due { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); }
+.due .si { width: 34px; height: 34px; border-radius: 10px; background: var(--blue-soft); color: var(--blue); display: flex; align-items: center; justify-content: center; flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--mut); padding: 2px 4px 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.legend i.dash { width: 16px; height: 0; border-radius: 0; border-top: 2px dashed var(--green); }
+.hbox { display: grid; gap: 8px; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line); }
+.hbox.red { border-color: var(--red); background: var(--red-soft); }
+.signs { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13px; color: var(--ink-2); }
+.rules { padding: 14px 16px; border-radius: 18px; display: grid; gap: 8px; }
+.rules ol { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
 .demo-note { font-size: 11px; color: var(--mut); display: flex; gap: 6px; align-items: flex-start; line-height: 1.4; }
 
 /* kamera */
