@@ -1,4 +1,4 @@
-/* DiaScan — ikon, ilustrasi kaki, aturan klinis, dan data contoh (mode demo). */
+/* DiaScan — ikon, aturan klinis, foto dataset, dan data contoh (mode demo). */
 (function (global) {
   'use strict';
 
@@ -132,72 +132,28 @@
     Rendah: { tone: 'green', title: 'Tidak ada luka terbuka.', text: 'Lanjutkan pemeriksaan kaki setiap hari dan gunakan alas kaki yang nyaman.' },
   };
 
-  // ---------- Ilustrasi telapak kaki (pengganti foto pasien) ----------
-  const TOES = [[80, 54, 21, 25], [114, 42, 12.5, 15.5], [137, 47, 11.5, 13.5], [156, 58, 10.5, 12], [171, 74, 9, 10.5]];
-  let gid = 0;
-  function footScene(f) {
-    const k = 'fs' + (gid++);
-    const crop = f.crop || [20, 14, 190, 190];
-    let s = `<svg viewBox="${crop.join(' ')}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-<defs>
-<linearGradient id="${k}s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EEC6A4"/><stop offset="1" stop-color="#C88C66"/></linearGradient>
-<radialGradient id="${k}e"><stop offset="0" stop-color="#DC2626" stop-opacity=".5"/><stop offset=".6" stop-color="#EF4444" stop-opacity=".22"/><stop offset="1" stop-color="#EF4444" stop-opacity="0"/></radialGradient>
-<radialGradient id="${k}w" cx=".45" cy=".5" r=".6"><stop offset="0" stop-color="#7F1D1D"/><stop offset=".5" stop-color="#B91C1C"/><stop offset=".85" stop-color="#F87171"/><stop offset="1" stop-color="#FDA4AF"/></radialGradient>
-<radialGradient id="${k}n" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#1C1310"/><stop offset=".7" stop-color="#3B231B"/><stop offset="1" stop-color="#7A3B2C"/></radialGradient>
-</defs>`;
-    TOES.forEach(([cx, cy, rx, ry]) => { s += `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="url(#${k}s)" stroke="rgba(130,75,45,.35)" stroke-width="1"/>`; });
-    s += `<path d="M110,358 C72,358 63,328 65,294 C67,258 80,238 78,204 C76,172 56,148 56,118 C56,88 80,70 114,70 C150,70 176,86 176,116 C176,148 168,172 167,204 C166,238 164,268 160,298 C158,332 146,358 110,358 Z" fill="url(#${k}s)" stroke="rgba(130,75,45,.4)" stroke-width="1.2"/>
-<ellipse cx="90" cy="212" rx="11" ry="40" fill="rgba(255,240,228,.28)"/><ellipse cx="112" cy="320" rx="33" ry="26" fill="rgba(255,255,255,.10)"/>
-<path d="M70 146 Q115 158 168 144" stroke="rgba(130,75,45,.18)" stroke-width="1.2" fill="none"/>`;
-    if (f.necro != null) {
-      const [cx, cy, rx, ry] = TOES[f.necro];
-      s += `<ellipse cx="${cx}" cy="${cy - ry * 0.3}" rx="${rx * 0.78}" ry="${ry * 0.62}" fill="url(#${k}n)" stroke="#9A4A36" stroke-width="1.4"/>`;
-    }
-    if (f.callus) {
-      const [x, y] = f.callus === true ? [156, 126] : f.callus;
-      s += `<ellipse cx="${x}" cy="${y}" rx="12" ry="9" fill="#F2DEBB" stroke="#D6B484" stroke-width=".8"/><ellipse cx="${x}" cy="${y}" rx="6" ry="4" fill="#F8ECD3"/>`;
-    }
-    if (f.ulcer) {
-      const { x, y, s: sc = 1 } = f.ulcer;
-      if (f.ery) s += `<circle cx="${x}" cy="${y}" r="${38 * Math.max(sc, 0.8)}" fill="url(#${k}e)"/>`;
-      s += `<g transform="translate(${x} ${y}) scale(${sc})"><path d="M-15,-2 C-17,-10 -7,-14 1,-13 C11,-12 17,-7 15,2 C13,11 5,14 -4,12 C-12,11 -14,5 -15,-2 Z" fill="url(#${k}w)" stroke="#FECDD3" stroke-width=".9"/>
-<ellipse cx="-6" cy="-4" rx="3.2" ry="2" fill="#FBBF24" opacity=".85"/><ellipse cx="7" cy="5" rx="2.6" ry="1.6" fill="#FCD34D" opacity=".8"/></g>`;
-    }
-    return s + '</svg>';
-  }
-  // Kotak deteksi (dalam koordinat gambar) dari fitur ilustrasi, dinormalisasi ke area crop
-  function sceneBoxes(f, conf) {
-    const crop = f.crop || [20, 14, 190, 190];
-    const n = ([x, y, w, h]) => [(x - crop[0]) / crop[2], (y - crop[1]) / crop[3], w / crop[2], h / crop[3]].map(v => +v.toFixed(4));
-    const out = [];
-    if (f.ulcer) {
-      const { x, y, s = 1 } = f.ulcer, hw = 17 * s * 1.1 + 2, hh = 14 * s * 1.1 + 2;
-      out.push({ cls: 'ulkus', conf: conf.ulkus ?? 0.9, box: n([x - hw, y - hh, hw * 2, hh * 2]) });
-      if (f.ery) { const r = 36 * Math.max(s, 0.8); out.push({ cls: 'infeksi', conf: conf.infeksi ?? 0.8, box: n([x - r, y - r, r * 2, r * 2]) }); }
-    }
-    if (f.necro != null) {
-      const [cx, cy, rx, ry] = TOES[f.necro];
-      out.push({ cls: 'nekrosis', conf: conf.nekrosis ?? 0.88, box: n([cx - rx - 2, cy - ry - 2, rx * 2 + 4, ry * 1.5]) });
-    }
-    if (f.callus) {
-      const [x, y] = f.callus === true ? [156, 126] : f.callus;
-      out.push({ cls: 'kalus', conf: conf.kalus ?? 0.75, box: n([x - 15, y - 12, 30, 24]) });
+  // ---------- Foto asli (Wound Image Dataset) ----------
+  // assets/photos.js dibuat oleh tools/build_photos.py: foto terpilih + kotak dari mask anotasi dataset.
+  const PHOTOS = global.DS_PHOTOS || {};
+  const photoImage = key => { const p = PHOTOS[key]; return { kind: 'photo', key, src: p.src, mask: p.mask || null, w: p.w, h: p.h, ref: p.ref }; };
+  // Tiap komponen mask menjadi satu kotak. Kelasnya "nekrosis" bila conf.nekrosis ada, selain itu "ulkus".
+  // conf.infeksi menambah kotak kemerahan di sekitar luka (kotak luka diperluas).
+  function photoDets(key, conf) {
+    const boxes = (PHOTOS[key] || {}).boxes || [];
+    const main = conf.nekrosis ? 'nekrosis' : conf.ulkus ? 'ulkus' : null;
+    if (!main || !boxes.length) return [];
+    const out = boxes.map((box, i) => ({ cls: main, conf: +(conf[main] - i * 0.06).toFixed(2), box }));
+    if (conf.infeksi) {
+      const x0 = Math.min(...boxes.map(b => b[0])), y0 = Math.min(...boxes.map(b => b[1]));
+      const x1 = Math.max(...boxes.map(b => b[0] + b[2])), y1 = Math.max(...boxes.map(b => b[1] + b[3]));
+      const e = Math.max(x1 - x0, y1 - y0) * 0.6, c = v => Math.min(1, Math.max(0, v));
+      const bx = [c(x0 - e), c(y0 - e)];
+      out.push({ cls: 'infeksi', conf: conf.infeksi, box: [bx[0], bx[1], c(x1 + e) - bx[0], c(y1 + e) - bx[1]].map(v => +v.toFixed(4)) });
     }
     return out;
   }
 
   // ---------- Data contoh ----------
-  const SCENES = {
-    budi: (s, ery) => ({ crop: [20, 14, 190, 190], ulcer: { x: 87, y: 114, s }, ery, callus: true }),
-    siti: () => ({ crop: [20, 8, 190, 190], necro: 0, ulcer: { x: 98, y: 118, s: 0.7 } }),
-    hendra: () => ({ crop: [35, 222, 160, 150], ulcer: { x: 112, y: 318, s: 0.85 } }),
-    agus: () => ({ crop: [40, 140, 170, 170], ulcer: { x: 150, y: 222, s: 0.75 } }),
-    maria: () => ({ crop: [20, 14, 190, 190], callus: true }),
-    dewi: () => ({ crop: [20, 14, 190, 190] }),
-    rahmat: () => ({ crop: [20, 14, 190, 190], ulcer: { x: 120, y: 100, s: 0.6 } }),
-    nur: () => ({ crop: [35, 222, 160, 150], callus: [112, 318] }),
-  };
-
   function seed(now) {
     const at = (daysAgo, hh, mm) => { const d = new Date(now); d.setDate(d.getDate() - daysAgo); d.setHours(hh, mm, 0, 0); return d.toISOString(); };
     const patients = [
@@ -212,41 +168,38 @@
     ];
     const scans = [];
     let n = 1;
-    const add = (pid, date, foot, site, scene, conf, area, status, extra = {}) => {
-      const dets = sceneBoxes(scene, conf);
+    const add = (pid, date, foot, site, key, conf, area, status, extra = {}) => {
+      const dets = photoDets(key, conf);
       const { wagner, priority } = assess(dets, area);
-      scans.push({ id: 's' + (n++), patientId: pid, date, foot, site, image: { kind: 'scene', scene }, detections: dets, area, wagner, priority, status, sent: true, ms: 24 + (n * 7) % 19, ...extra });
+      scans.push({ id: 's' + (n++), patientId: pid, date, foot, site, image: photoImage(key), detections: dets, area, wagner, priority, status, sent: true, ms: 24 + (n * 7) % 19, ...extra });
     };
     // Episode pemantauan mingguan: luas luka per minggu sejak foto awal (minggu ke-0).
-    // Ukuran ulkus pada ilustrasi mengikuti luasnya. Pindaian hari ini masuk antrean (Menunggu).
-    const series = (pid, foot, site, startDaysAgo, areas, scene, conf, hh, mm) => areas.forEach((a, w) => {
-      const d = startDaysAgo - w * 7, c = conf(w);
-      let sc = scene(a, w);
-      if (sc.ulcer && pid !== 'p2') sc = { ...sc, ulcer: { ...sc.ulcer, s: +(sc.ulcer.s * Math.sqrt(a / areas[areas.length - 1])).toFixed(3) } };
-      if (c.infeksi) sc = { ...sc, ery: true };
-      add(pid, at(d, hh, mm + w), foot, site, sc, c, a, d === 0 ? 'Menunggu' : 'Divalidasi');
+    // Foto tiap minggu diambil dari satu pasien yang sama di dataset. Pindaian hari ini masuk antrean (Menunggu).
+    const series = (pid, foot, site, startDaysAgo, areas, prefix, conf, hh, mm) => areas.forEach((a, w) => {
+      const d = startDaysAgo - w * 7;
+      add(pid, at(d, hh, mm + w), foot, site, prefix + '-' + w, conf(w), a, d === 0 ? 'Menunggu' : 'Divalidasi');
     });
-    // Budi (akun pasien demo): sempat sesuai target, lalu melambat → "Waspada" di minggu ke-3.
+    // Budi (akun pasien demo): luka ujung ibu jari, sempat sesuai target, lalu melambat → "Waspada" di minggu ke-3.
     // Minggu ke-4 (titik keputusan) jatuh hari ini dan belum dipindai.
-    series('p2', 'Kanan', 'Metatarsal I', 28, [4.2, 3.9, 3.6, 3.5], a => SCENES.budi(+Math.sqrt(a / 3.2).toFixed(3), false), w => w === 0 ? { ulkus: 0.9, infeksi: 0.76, kalus: 0.74 } : { ulkus: 0.9, kalus: 0.74 }, 7, 30);
-    // Siti: luka membesar dan muncul nekrosis → "Waspada" (minggu ke-3).
-    series('p1', 'Kiri', 'Ibu jari', 21, [1.2, 1.3, 1.4, 1.6], (a, w) => w < 2 ? { ...SCENES.siti(), necro: null } : SCENES.siti(), w => w < 2 ? { ulkus: 0.78 } : { nekrosis: 0.88, ulkus: 0.79 }, 6, 55);
-    // Hendra: mengecil sesuai target (minggu ke-3).
-    series('p3', 'Kanan', 'Tumit', 21, [3.8, 3.2, 2.7, 2.3], () => SCENES.hendra(), () => ({ ulkus: 0.86 }), 8, 7);
+    series('p2', 'Kanan', 'Ibu jari', 28, [1.6, 1.5, 1.39, 1.34], 'budi', w => ({ ulkus: [0.91, 0.88, 0.9, 0.87][w] }), 7, 30);
+    // Siti: eskar hitam (nekrosis) di tumit makin luas → "Waspada" (minggu ke-3).
+    series('p1', 'Kiri', 'Tumit', 21, [5.2, 5.6, 6.0, 6.8], 'siti', w => ({ nekrosis: [0.86, 0.89, 0.88, 0.9][w] }), 6, 55);
+    // Hendra: ulkus plantar di bawah metatarsal I, mengecil sesuai target (minggu ke-3).
+    series('p3', 'Kanan', 'Metatarsal I', 21, [3.8, 3.2, 2.7, 2.3], 'hendra', () => ({ ulkus: 0.86 }), 8, 7);
     // Agus: minggu ke-4 hanya turun 21% → "Disarankan rujuk".
-    series('p4', 'Kiri', 'Plantar tengah', 28, [2.4, 2.3, 2.2, 2.1, 1.9], () => SCENES.agus(), () => ({ ulkus: 0.84 }), 8, 44);
-    // Rahmat: sempat terinfeksi, setelah dirujuk turun 50% di minggu ke-4 → "Patokan tercapai".
-    series('p7', 'Kiri', 'Metatarsal III', 35, [3.0, 2.4, 1.9, 1.5, 1.2], () => SCENES.rahmat(), w => w < 2 ? { ulkus: 0.84, infeksi: 0.72 } : { ulkus: 0.81 }, 9, 12);
-    // Tanpa luka terbuka (tidak masuk jalur tren)
-    add('p5', at(0, 8, 31), 'Kiri', 'Metatarsal V', SCENES.maria(), { kalus: 0.83 }, null, 'Menunggu');
-    add('p6', at(0, 9, 5), 'Kanan', 'Jari II', SCENES.dewi(), {}, null, 'Divalidasi');
-    [['p5', 'Kiri', 'Metatarsal V', 3, SCENES.maria, { kalus: 0.8 }], ['p6', 'Kanan', 'Jari II', 2, SCENES.dewi, {}], ['p8', 'Kanan', 'Tumit', 4, SCENES.nur, { kalus: 0.79 }]]
-      .forEach(([pid, foot, site, count, scene, conf], k) => {
-        for (let w = 1; w <= count; w++) add(pid, at(w * 7 + k, 8 + k, 5 + k * 6), foot, site, scene(), conf, null, 'Divalidasi');
+    series('p4', 'Kiri', 'Plantar depan', 28, [2.4, 2.3, 2.2, 2.1, 1.9], 'agus', () => ({ ulkus: 0.84 }), 8, 44);
+    // Rahmat: ulkus tumit sempat terinfeksi, setelah dirujuk turun 50% di minggu ke-4 → "Patokan tercapai".
+    series('p7', 'Kiri', 'Tumit', 35, [3.0, 2.4, 1.9, 1.5, 1.2], 'rahmat', w => w < 2 ? { ulkus: 0.84, infeksi: 0.72 } : { ulkus: 0.81 }, 9, 12);
+    // Kaki normal tanpa luka (tidak masuk jalur tren)
+    add('p5', at(0, 8, 31), 'Kiri', 'Telapak kaki', 'maria-0', {}, null, 'Menunggu');
+    add('p6', at(0, 9, 5), 'Kanan', 'Telapak kaki', 'dewi-0', {}, null, 'Divalidasi');
+    [['p5', 'Kiri', 'maria', 3], ['p6', 'Kanan', 'dewi', 2], ['p8', 'Kanan', 'nur', 4]]
+      .forEach(([pid, foot, prefix, count], k) => {
+        for (let w = 1; w <= count; w++) add(pid, at(w * 7 + k, 8 + k, 5 + k * 6), foot, 'Telapak kaki', prefix + '-' + (pid === 'p8' ? w - 1 : w), {}, null, 'Divalidasi');
       });
 
     return {
-      v: 2,
+      v: 3,
       me: 'p2',
       patients,
       scans,
@@ -257,14 +210,14 @@
         { id: 'r1', patientId: 'p7', scanId: null, hospital: 'RSUD Kota Sukamaju', urgency: 'Terjadwal', reason: 'Evaluasi vaskular (dugaan penyakit arteri perifer)', date: at(30, 10, 0), status: 'Selesai' },
       ],
       corrections: [
-        { date: at(1, 15, 5), patientId: 'p5', from: 'Ulkus', to: 'Kalus' },
-        { date: at(1, 15, 4), patientId: 'p8', from: 'Ulkus', to: 'Kalus' },
+        { date: at(1, 15, 5), patientId: 'p5', from: 'Ulkus', to: '(tidak ada temuan)' },
+        { date: at(1, 15, 4), patientId: 'p8', from: 'Ulkus', to: '(tidak ada temuan)' },
         { date: at(31, 10, 40), patientId: 'p7', from: '(tidak terdeteksi)', to: 'Tanda infeksi' },
       ],
       activity: [
         { icon: 'send', tone: 'teal', text: 'Kader Desa Mekarsari mengirim 2 pindaian', date: at(0, 8, 50) },
         { icon: 'check', tone: 'green', text: 'Pindaian Dewi Kartika divalidasi: tidak ada temuan', date: at(0, 9, 12) },
-        { icon: 'edit', tone: 'violet', text: 'dr. Rina mengoreksi 2 label "Kalus"', date: at(1, 15, 5) },
+        { icon: 'edit', tone: 'violet', text: 'dr. Rina mengoreksi 2 label ulkus positif palsu', date: at(1, 15, 5) },
       ],
       reminders: [
         { id: 'm1', text: 'Periksa kedua telapak kaki', time: '06.30', done: true },
@@ -283,5 +236,5 @@
 
   const HOSPITALS = ['RSUD Kota Sukamaju', 'RS Mitra Sehat', 'RS Bhakti Husada'];
 
-  global.DS = { I, ic, CLASSES, assess, ADVICE, HEAL, healTrack, HEAL_INFO, DANGER_SIGNS, urgentCheck, footScene, sceneBoxes, SCENES, seed, HOSPITALS };
+  global.DS = { I, ic, CLASSES, assess, ADVICE, HEAL, healTrack, HEAL_INFO, DANGER_SIGNS, urgentCheck, PHOTOS, photoImage, photoDets, seed, HOSPITALS };
 })(window);

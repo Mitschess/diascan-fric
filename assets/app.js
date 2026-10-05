@@ -1,7 +1,7 @@
 /* DiaScan — aplikasi pasien + dasbor tenaga kesehatan (prototipe, mode demo). */
 (function () {
   'use strict';
-  const { ic, CLASSES, assess, ADVICE, HEAL, healTrack, HEAL_INFO, DANGER_SIGNS, urgentCheck, footScene, sceneBoxes, SCENES, seed, HOSPITALS } = window.DS;
+  const { ic, CLASSES, assess, ADVICE, HEAL, healTrack, HEAL_INFO, DANGER_SIGNS, urgentCheck, PHOTOS, photoImage, photoDets, seed, HOSPITALS } = window.DS;
   const KEY = 'diascan-demo-v1', MODE_KEY = 'diascan-mode';
   const root = document.getElementById('app');
   const toastZone = document.getElementById('toasts');
@@ -11,12 +11,12 @@
   const readLS = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const writeLS = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
   let S = null;
-  try { const o = JSON.parse(readLS(KEY) || 'null'); if (o && o.v === 2) S = o; } catch (e) { S = null; }
+  try { const o = JSON.parse(readLS(KEY) || 'null'); if (o && o.v === 3) S = o; } catch (e) { S = null; }
   if (!S) S = seed(new Date());
   function persist() {
     if (writeLS(KEY, JSON.stringify(S))) return;
     for (const s of S.scans) {
-      if (s.image.kind === 'photo' && s.image.src) { s.image.src = null; if (writeLS(KEY, JSON.stringify(S))) return; }
+      if (s.image.src && s.image.src.startsWith('data:')) { s.image.src = null; if (writeLS(KEY, JSON.stringify(S))) return; }
     }
   }
 
@@ -25,7 +25,7 @@
   const U = {
     mode: hash === 'nakes' || hash === 'pasien' ? hash : (readLS(MODE_KEY) === 'nakes' ? 'nakes' : 'pasien'),
     pv: 'home', pStack: [], scanId: null, histTab: 'area', foot: 'Kanan', sheet: null, sheetId: null,
-    analyzing: null, cam: null, showBoxes: true,
+    analyzing: null, cam: null, showBoxes: true, showMask: false,
     cv: 'dash', sel: null, fPri: 'Semua', fSt: 'aktif', q: '', compare: false, selPatient: 'p2',
     modal: null, training: null, noteDraft: '', pNote: '', urgent: null,
   };
@@ -103,21 +103,24 @@
   // ---------- foto + kotak deteksi ----------
   function imgInner(s, fit = 'meet') {
     const im = s.image || s;
-    if (im.kind === 'scene') return fit === 'slice' ? footScene(im.scene).replace('xMidYMid meet', 'xMidYMid slice') : footScene(im.scene);
     if (!im.src) return `<div class="empty" style="position:absolute;inset:0;align-content:center">${ic('image', 22)}<span class="small">Foto tidak tersimpan</span></div>`;
     return `<img src="${im.src}" alt="Foto telapak kaki yang dipindai" style="object-fit:${fit === 'slice' ? 'cover' : 'contain'}">`;
   }
-  const ratioOf = im => im.kind === 'scene' ? (im.scene.crop || [0, 0, 190, 190])[2] / (im.scene.crop || [0, 0, 190, 190])[3] : im.w / im.h;
+  const ratioOf = im => im.w / im.h;
   function boxHTML(d, dets, labels = true) {
     const [x, y, w, h] = d.box, c = CLASSES[d.cls];
     const below = y < 0.11 || (d.cls === 'ulkus' && dets.some(o => o.cls === 'infeksi'));
     const txt = c.label + ' ' + (d.manual ? '(manual)' : pct(d.conf));
     return `<div class="bx${below ? ' lb' : ''}" style="--c:${c.color};left:${(x * 100).toFixed(2)}%;top:${(y * 100).toFixed(2)}%;width:${(w * 100).toFixed(2)}%;height:${(h * 100).toFixed(2)}%">${labels ? `<i>${txt}</i>` : ''}</div>`;
   }
-  function photo(s, { boxes = true, tags = '' } = {}) {
+  function photo(s, { boxes = true, mask = false, tags = '' } = {}) {
     const bx = boxes ? s.detections.filter(d => d.box).map(d => boxHTML(d, s.detections)).join('') : '';
-    return `<div class="photo" style="aspect-ratio:${ratioOf(s.image).toFixed(4)}">${imgInner(s)}${bx}${tags}</div>`;
+    const mk = mask && s.image.mask ? `<img class="mask" src="${s.image.mask}" alt="">` : '';
+    return `<div class="photo" style="aspect-ratio:${ratioOf(s.image).toFixed(4)}">${imgInner(s)}${mk}${bx}${tags}</div>`;
   }
+  const srcNote = s => s.image.ref
+    ? `Foto asli dari Wound Image Dataset (${esc(s.image.ref)}). Kotak dihitung dari mask anotasi dataset, belum dari model YOLO terlatih.`
+    : 'Mode demo: kotak dari pencarian area kemerahan sederhana, bukan hasil model YOLO terlatih.';
   const thumb = (s, cls = '') => `<span class="thumb ${cls}">${imgInner(s, 'slice')}</span>`;
 
   // ---------- simulasi deteksi untuk foto unggahan / kamera ----------
@@ -183,13 +186,15 @@
     const cm = 14, a = u.box[2] * cm * u.box[3] * cm * (h / w) * 0.6;
     return +Math.max(0.2, a).toFixed(1);
   }
-  // Foto contoh: pindai mingguan mengecil 12% dari pindai mingguan terakhir; laporan keluhan menampilkan kemerahan.
+  // Tombol rana tanpa kamera memakai foto dataset: foto lanjutan dari seri ibu jari Budi untuk pindai mingguan
+  // (luas mengecil 12% dari pindai mingguan terakhir), atau foto ulkus dengan kemerahan untuk laporan keluhan.
+  const DEMO_POOL = ['budi-4', 'budi-5', 'budi-6', 'budi-7'];
   function demoNext() {
-    const prev = myScans().filter(s => s.area && !s.urgent).pop(), base = prev ? prev.area : 3.6;
-    const urgent = !!U.urgent;
-    const area = urgent ? base : Math.max(0.8, +(base * 0.88).toFixed(1));
-    const sc = +Math.sqrt(area / 3.2).toFixed(3);
-    return { area, scene: SCENES.budi(sc, urgent), conf: { ulkus: +(0.86 + Math.random() * 0.08).toFixed(2), infeksi: urgent ? 0.82 : 0.7, kalus: +(0.7 + Math.random() * 0.1).toFixed(2) } };
+    const trend = myScans().filter(s => s.area && !s.urgent), prev = trend[trend.length - 1], base = prev ? prev.area : 1.4;
+    const conf = +(0.86 + Math.random() * 0.08).toFixed(2);
+    if (U.urgent) return { key: 'keluhan-0', site: 'Jari III', area: base, conf: { ulkus: conf, infeksi: 0.82 } };
+    const k = trend.filter(s => s.mine).length % DEMO_POOL.length;
+    return { key: DEMO_POOL[k], site: 'Ibu jari', area: Math.max(0.3, +(base * 0.88).toFixed(1)), conf: { ulkus: conf } };
   }
 
   // ---------- kamera (opsional; bila ditolak, pakai Galeri) ----------
@@ -233,7 +238,7 @@
 
   // ---------- alur pindai ----------
   const STEPS = ['Memeriksa kualitas foto', 'Menjalankan model deteksi', 'Mengukur luas luka', 'Menyusun rekomendasi'];
-  function startAnalysis(image, dets, area) {
+  function startAnalysis(image, dets, area, site = 'Belum ditentukan') {
     stopCamera();
     U.analyzing = { image, step: 0 };
     render();
@@ -247,7 +252,7 @@
       U.urgent = null;
       const s = {
         id: 's' + Date.now().toString(36), patientId: S.me, date: new Date().toISOString(), foot: U.foot,
-        site: image.kind === 'scene' ? 'Metatarsal I' : 'Belum ditentukan', image, detections: dets, area, wagner, priority,
+        site, image, detections: dets, area, wagner, priority,
         status: 'Tersimpan', sent: false, ms: 18 + Math.round(Math.random() * 16), mine: true,
       };
       if (urgent) s.urgent = urgent;
@@ -267,7 +272,7 @@
       startAnalysis({ kind: 'photo', src: c.toDataURL('image/jpeg', 0.8), w: c.width, h: c.height }, dets, estArea(dets, c.width, c.height));
     } else {
       const d = demoNext();
-      startAnalysis({ kind: 'scene', scene: d.scene }, sceneBoxes(d.scene, d.conf), d.area);
+      startAnalysis(photoImage(d.key), photoDets(d.key, d.conf), d.area, d.site);
     }
   }
   fileInput.addEventListener('change', () => {
@@ -343,7 +348,7 @@
           <h3>Pindai luka kaki Anda</h3>
           <p>Arahkan kamera ke telapak kaki, hasil keluar kurang dari 1 detik.</p>
           <button class="cta" data-act="pgo" data-v="scan">${ic('camera', 16, 2.3)}Mulai Pindai</button>
-          <div class="art">${footScene({ crop: [22, 10, 186, 356], ulcer: { x: 87, y: 114, s: 1 }, callus: true })}</div>
+          <div class="art"><img src="${PHOTOS['hendra-0'].src}" alt=""></div>
         </section>
         ${healCard()}
         <div class="sec"><h3>Ringkasan Hari Ini</h3></div>
@@ -380,8 +385,7 @@
   function pScan() {
     const live = !!U.cam;
     const d = demoNext();
-    const vf = { ...d.scene, crop: [25, 12, 180, 352] };
-    const vfBoxes = sceneBoxes(vf, d.conf);
+    const vfBoxes = photoDets(d.key, d.conf);
     const recent = myScans().slice(-3).reverse();
     const t = trackOf(S.me), urg = U.urgent;
     const banner = urg
@@ -390,15 +394,15 @@
     return phead(urg ? 'Foto Keluhan' : 'Pindai Luka', urg ? 'Laporan tanda bahaya, bisa kapan saja' : 'Foto telapak kaki untuk dianalisis', { back: true, right: `<button class="icon-btn" data-act="sheet" data-s="tips" aria-label="Tips memotret luka">${ic('info', 20)}</button>` }) + banner + `
     <div class="scan-grid">
       <div class="cam">
-        <div style="display:flex;justify-content:center"><span class="live-pill"><span class="live-dot"></span>${live ? 'Kamera aktif · deteksi langsung' : 'Pratinjau contoh · deteksi simulasi'}</span></div>
+        <div style="display:flex;justify-content:center"><span class="live-pill"><span class="live-dot"></span>${live ? 'Kamera aktif · deteksi langsung' : 'Pratinjau foto dataset'}</span></div>
         <div class="viewfinder"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
           <div class="vf-inner">${live
             ? `<div class="vf-stage" id="camStage" style="aspect-ratio:3/4"><video id="camVideo" autoplay playsinline muted></video><div id="liveBoxes" class="live-layer"></div></div>`
-            : `<div class="vf-stage" style="aspect-ratio:180/352">${footScene(vf)}<div id="liveBoxes" class="live-layer">${vfBoxes.map(b => boxHTML(b, vfBoxes)).join('')}</div></div>`}</div>
+            : `<div class="vf-stage" style="aspect-ratio:1"><img src="${PHOTOS[d.key].src}" alt="Pratinjau foto contoh dari dataset"><div id="liveBoxes" class="live-layer">${vfBoxes.map(b => boxHTML(b, vfBoxes)).join('')}</div></div>`}</div>
         </div>
         <div class="qchips"><span class="ok">${ic('sun', 13, 2.2)}Cahaya baik</span><span class="ok">${ic('focus', 13, 2.2)}Fokus tajam</span><span class="ok">${ic('ruler', 13, 2.2)}± 25 cm</span></div>
         <div class="cam-panel">
-          <div class="hint">${live ? 'Tahan ponsel 20–30 cm dari telapak kaki' : 'Tekan rana untuk memakai foto contoh, atau unggah foto dari Galeri'}</div>
+          <div class="hint">${live ? 'Tahan ponsel 20–30 cm dari telapak kaki' : 'Tekan rana untuk memakai foto dari dataset, atau unggah foto dari Galeri'}</div>
           <div class="seg dark" role="group" aria-label="Pilih kaki">${['Kiri', 'Kanan'].map(f => `<button data-act="foot" data-f="${f}" aria-pressed="${U.foot === f}">Kaki ${f.toLowerCase()}</button>`).join('')}</div>
           <div class="cam-row">
             <button class="cam-side" data-act="upload" aria-label="Unggah foto dari galeri">${ic('image', 20)}Galeri</button>
@@ -416,7 +420,7 @@
           <h2 style="font-size:15px;font-weight:800">Pindaian terakhir</h2>
           ${recent.map(s => `<button class="row" style="width:100%;text-align:left;gap:11px" data-act="open-scan" data-id="${s.id}">${thumb(s, 'sm')}<span class="grow"><b style="font-size:13px;display:block">${relDate(s.date)}</b><span class="small muted">${findingsText(s)}${s.area ? ' · ' + fmtArea(s.area) : ''}</span></span>${urgentChip(s)}${statusChip(s)}</button>`).join('') || '<p class="small muted">Belum ada pindaian.</p>'}
         </div>
-        <p class="disclaimer">Mode demo: deteksi disimulasikan dengan ilustrasi dan analisis warna sederhana, bukan model YOLO terlatih.</p>
+        <p class="disclaimer">Mode demo: tombol rana memakai foto asli dari Wound Image Dataset dengan kotak dari mask anotasinya. Foto kamera dan Galeri dianalisis dengan pencarian warna sederhana. Belum ada model YOLO terlatih.</p>
       </div>
     </div>`;
   }
@@ -453,11 +457,11 @@
         <div class="row" style="justify-content:space-between;gap:8px"><span class="small muted" style="font-weight:700">Pemantauan mingguan · ${weekLabel(hp.wk)}</span>${healChip(hp.status)}</div>
         <b style="font-size:13.5px">${healReason(hp)}</b>
         <p class="small muted">${HEAL_INFO[hp.status].msg}</p></div>` + guide;
-    return phead(u ? 'Hasil Laporan Keluhan' : 'Hasil Analisis', `Kaki ${s.foot.toLowerCase()} · ${relDate(s.date)}`, { back: true, right: `<button class="btn btn-ghost btn-sm" data-act="toggle-boxes" aria-pressed="${U.showBoxes}">${ic('eye', 16)}${U.showBoxes ? 'Sembunyikan kotak' : 'Tampilkan kotak'}</button>` }) + `
+    return phead(u ? 'Hasil Laporan Keluhan' : 'Hasil Analisis', `Kaki ${s.foot.toLowerCase()} · ${relDate(s.date)}`, { back: true, right: `${s.image.mask ? `<button class="btn btn-ghost btn-sm" data-act="toggle-mask" aria-pressed="${U.showMask}">${ic('layers', 16)}${U.showMask ? 'Sembunyikan mask' : 'Tampilkan mask'}</button>` : ''}<button class="btn btn-ghost btn-sm" data-act="toggle-boxes" aria-pressed="${U.showBoxes}">${ic('eye', 16)}${U.showBoxes ? 'Sembunyikan kotak' : 'Tampilkan kotak'}</button>` }) + `
     <div class="res-grid">
       <div class="col">
-        ${photo(s, { boxes: U.showBoxes, tags })}
-        <p class="demo-note">${ic('info', 13)}<span>Mode demo: kotak deteksi disimulasikan, bukan hasil model YOLO terlatih.</span></p>
+        ${photo(s, { boxes: U.showBoxes, mask: U.showMask, tags })}
+        <p class="demo-note">${ic('info', 13)}<span>${srcNote(s)}</span></p>
       </div>
       <div class="col">
         <div class="card" style="padding:10px 16px 6px;border-radius:18px">
@@ -621,14 +625,15 @@
       case 'tips':
         label = 'Tips memotret';
         inner = `<h3 style="font-size:17px">Tips memotret luka</h3><ul style="margin:0;padding-left:18px;display:grid;gap:6px;font-size:13.5px;color:var(--ink-2)">${EDU[5][2].map(t => `<li>${t}</li>`).join('')}<li>Bersihkan lensa kamera sebelum memotret.</li></ul>
-          <p class="small muted">Di prototipe ini, tombol rana memakai foto contoh. Gunakan Galeri untuk menguji foto Anda sendiri.</p><button class="btn btn-primary" data-act="close-sheet">Mengerti</button>`;
+          <p class="small muted">Di prototipe ini, tombol rana memakai foto dari Wound Image Dataset. Gunakan Galeri untuk menguji foto Anda sendiri.</p><button class="btn btn-primary" data-act="close-sheet">Mengerti</button>`;
         break;
       case 'about':
         label = 'Tentang mode demo';
         inner = `<h3 style="font-size:17px">Tentang mode demo</h3><div style="display:grid;gap:8px;font-size:13.5px;color:var(--ink-2)">
           <p>Prototipe ini memperlihatkan alur DiaScan: memindai kaki, mengirim hasil, dan ditinjau tenaga kesehatan.</p>
-          <p>Belum ada model YOLO terlatih di dalamnya. Foto contoh memakai kotak deteksi yang sudah ditentukan, sedangkan foto unggahan dianalisis dengan pencarian area kemerahan sederhana.</p>
-          <p>Pemantauan 4 minggu membandingkan luas luka tiap minggu dengan target turun 50% di minggu ke-4. Di mode demo, tombol rana menghasilkan luka yang mengecil 12% dari pindai mingguan sebelumnya.</p>
+          <p>Foto pasien contoh adalah foto asli dari Wound Image Dataset (foto luka beserta mask segmentasinya, dan foto kaki normal). Kotak deteksi dihitung dari mask anotasi dataset; tombol <b>Tampilkan mask</b> memperlihatkan area lukanya.</p>
+          <p>Belum ada model YOLO terlatih di dalamnya. Foto dari kamera atau Galeri dianalisis dengan pencarian area kemerahan sederhana.</p>
+          <p>Pemantauan 4 minggu membandingkan luas luka tiap minggu dengan target turun 50% di minggu ke-4. Foto tiap minggu berasal dari satu pasien yang sama di dataset, tetapi angka luasnya adalah data contoh. Tombol rana mencatat luas yang mengecil 12% dari pindai mingguan sebelumnya.</p>
           <p>Semua nama dan data adalah contoh. Data tersimpan hanya di peramban Anda.</p></div><button class="btn btn-primary" data-act="close-sheet">Tutup</button>`;
         break;
       case 'urgent':
@@ -718,14 +723,15 @@
     const p = patient(s.patientId), prev = prevScan(s), done = !isOpen(s), st = STATUS[s.status], hp = pointOf(s);
     const suggest = (s.urgent && s.urgent.danger) || (hp && hp.status === 'rujuk');
     const ref = S.referrals.find(r => r.scanId === s.id);
-    const fig = x => `<figure>${photo(x, { boxes: U.showBoxes })}<figcaption>${shortDate(x.date)} · ${x.area ? fmtArea(x.area) : 'tanpa ulkus'}</figcaption></figure>`;
+    const fig = x => `<figure>${photo(x, { boxes: U.showBoxes, mask: U.showMask })}<figcaption>${shortDate(x.date)} · ${x.area ? fmtArea(x.area) : 'tanpa ulkus'}</figcaption></figure>`;
     return `<div class="card preview">
       <div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="font-size:15.5px;font-weight:800">Pratinjau Deteksi</h2><p class="small muted">${esc(p.name)} · Kaki ${s.foot.toLowerCase()} · ${relDate(s.date)}</p></div>${s.wagner != null ? `<span class="chip t-amber">Wagner ${s.wagner} (est.)</span>` : ''}</div>
-      ${U.compare && prev ? `<div class="cmp">${fig(prev)}${fig(s)}</div>` : photo(s, { boxes: U.showBoxes })}
+      ${U.compare && prev ? `<div class="cmp">${fig(prev)}${fig(s)}</div>` : photo(s, { boxes: U.showBoxes, mask: U.showMask })}
       <div class="row" style="gap:6px;flex-wrap:wrap">
         <button class="chip ${U.showBoxes ? 't-teal' : 't-gray'}" data-act="toggle-boxes" aria-pressed="${U.showBoxes}">${ic('eye', 12)}Kotak deteksi</button>
+        ${s.image.mask ? `<button class="chip ${U.showMask ? 't-teal' : 't-gray'}" data-act="toggle-mask" aria-pressed="${U.showMask}">${ic('layers', 12)}Mask</button>` : ''}
         ${prev ? `<button class="chip ${U.compare ? 't-teal' : 't-gray'}" data-act="compare" aria-pressed="${U.compare}">${ic('layers', 12)}Bandingkan ${shortDate(prev.date)}</button>` : ''}
-        <span class="chip t-gray mono">${s.ms} ms</span>${s.image.kind === 'photo' ? '<span class="chip t-blue">Foto unggahan</span>' : ''}
+        <span class="chip t-gray mono">${s.ms} ms</span>${s.image.ref ? `<span class="chip t-gray mono" title="Foto dari Wound Image Dataset">${esc(s.image.ref)}</span>` : '<span class="chip t-blue">Foto unggahan</span>'}
       </div>
       <div style="display:grid;gap:9px">${s.detections.length ? s.detections.map(d => dlRow(d, s)).join('') : '<p class="small muted">Tidak ada temuan pada foto ini.</p>'}</div>
       ${healBox(s)}
@@ -891,7 +897,7 @@
         <div style="display:grid;gap:16px;min-width:0">
           <div class="card pcard" style="display:grid;gap:12px">
             <div class="row" style="justify-content:space-between;flex-wrap:wrap"><div><h2 style="font-size:16px;font-weight:800">${esc(m.version)}</h2><p class="small muted">Model aktif di server · varian nano berjalan di ponsel</p></div><span class="chip t-green">${ic('check', 12, 3)}Aktif</span></div>
-            <dl class="kv"><dt>Arsitektur</dt><dd>YOLO11s (server) · YOLO11n (ponsel)</dd><dt>Kelas</dt><dd>Ulkus, Tanda infeksi, Nekrosis, Kalus</dd><dt>Ukuran input</dt><dd>640 × 640 piksel</dd><dt>Format</dt><dd>ONNX (server) · TFLite (ponsel)</dd><dt>Data latih</dt><dd>DFUC2020 + citra lokal Puskesmas mitra</dd></dl>
+            <dl class="kv"><dt>Arsitektur</dt><dd>YOLO11s (server) · YOLO11n (ponsel)</dd><dt>Kelas</dt><dd>Ulkus, Tanda infeksi, Nekrosis, Kalus</dd><dt>Ukuran input</dt><dd>640 × 640 piksel</dd><dt>Format</dt><dd>ONNX (server) · TFLite (ponsel)</dd><dt>Data latih</dt><dd>Wound Image Dataset (2.686 foto luka + mask, 2.757 foto kaki normal) + citra lokal Puskesmas mitra</dd></dl>
             <p class="demo-note">${ic('info', 13)}<span>Mode demo: halaman ini mensimulasikan siklus pelatihan ulang; belum ada model yang benar-benar dilatih.</span></p>
           </div>
           <div class="card pcard" style="display:grid;gap:10px">
@@ -1044,6 +1050,7 @@
     rem: t => { const r = S.reminders.find(x => x.id === t.dataset.id); r.done = !r.done; persist(); render(); },
     'open-scan': t => { U.scanId = t.dataset.id; U.showBoxes = true; goPatient('result'); },
     'toggle-boxes': () => { U.showBoxes = !U.showBoxes; render(); },
+    'toggle-mask': () => { U.showMask = !U.showMask; render(); },
     foot: t => { U.foot = t.dataset.f; render(); },
     'urgent-cancel': () => { U.urgent = null; render(); },
     upload: () => fileInput.click(),

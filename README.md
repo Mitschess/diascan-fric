@@ -57,11 +57,37 @@ Penyembuhan 4 Minggu*, dan formulir rujukan terisi otomatis dengan alasannya.
 > daripada perubahan luka seminggu. Untuk versi sungguhan, stiker kalibrasi sebaiknya wajib, dan foto harus
 > diambil dari kaki, lokasi, jarak, dan sudut yang sama.
 
+## Foto dari Wound Image Dataset
+
+Semua foto pasien contoh adalah **foto asli** dari folder `Wound Image Dataset/` (foto luka `wound_main`,
+mask segmentasi `wound_mask`, dan foto kaki normal `Nomal`). Folder dataset (± 266 MB) tidak ikut di-commit;
+hanya 38 foto terpilih (± 0,9 MB) yang disalin ke `assets/photos/` oleh `tools/build_photos.py`:
+
+```bash
+pip install pillow numpy scipy
+python tools/build_photos.py   # menulis assets/photos/*.jpg, *-mask.png, dan assets/photos.js
+```
+
+Yang dilakukan skrip:
+
+- **Seri mingguan dari pasien yang sama.** Dataset berisi beberapa pasien yang difoto berulang dengan tanggal
+  berbeda. Seri itu dipakai untuk pemantauan 4 minggu: Budi (ujung ibu jari), Siti (eskar hitam/nekrosis di tumit),
+  Hendra dan Agus (ulkus plantar), Rahmat (ulkus tumit dengan kemerahan). Maria, Dewi, dan Nur memakai foto kaki normal.
+- **Label nama dipotong.** Sebagian foto memuat penggaris dengan nama pasien; foto itu dipotong agar nama tidak terlihat.
+- **Kotak deteksi dari mask.** Mask (format JPEG, ada derau) dihaluskan, bercak kecil dibuang, lalu tiap area luka
+  menjadi satu kotak. Di halaman hasil dan dasbor nakes ada tombol **Mask** untuk menampilkan area segmentasinya.
+- Kelas di luar mask (nekrosis, tanda infeksi) ditentukan per seri sesuai isi foto; kotak *tanda infeksi* adalah
+  kotak luka yang diperluas.
+
+Untuk mengganti atau menambah foto, ubah daftar `WOUNDS` / `NORMALS` di `tools/build_photos.py` lalu jalankan ulang.
+
 ## Catatan penting (mode demo)
 
-- **Belum ada model YOLO terlatih.** Foto contoh memakai kotak deteksi yang sudah ditentukan;
-  foto unggahan dianalisis dengan pencarian area kemerahan sederhana (`analyzeImage` di `assets/app.js`).
-- Semua nama pasien, angka, dan hasil deteksi adalah **data contoh**. Tombol rana menghasilkan luka yang mengecil 12% dari pindai mingguan sebelumnya; di mode laporan keluhan, foto contoh menampilkan kemerahan.
+- **Belum ada model YOLO terlatih.** Foto contoh memakai kotak dari mask anotasi dataset;
+  foto dari kamera atau Galeri dianalisis dengan pencarian area kemerahan sederhana (`analyzeImage` di `assets/app.js`).
+- Nama pasien, **angka luas luka**, dan tanggal adalah **data contoh**; fotonya asli, tetapi luasnya tidak diukur dari foto.
+  Tombol rana (tanpa kamera) memakai foto lanjutan dari seri Budi dan mencatat luas yang mengecil 12% dari pindai
+  mingguan sebelumnya; di mode laporan keluhan, tombol rana memakai foto ulkus dengan kemerahan.
 - Data disimpan di `localStorage` browser masing-masing; tombol **Atur ulang data** mengembalikan data contoh.
 - Bukan alat diagnosis medis.
 
@@ -76,8 +102,11 @@ Penyembuhan 4 Minggu*, dan formulir rujukan terisi otomatis dengan alasannya.
 ## Struktur
 
 ```
-index.html          halaman utama
-assets/style.css    tampilan (tema terang & gelap, responsif)
-assets/data.js      ikon, ilustrasi kaki, aturan triase, data contoh
-assets/app.js       logika aplikasi (peran pasien & nakes)
+index.html              halaman utama
+assets/style.css        tampilan (tema terang & gelap, responsif)
+assets/photos.js        daftar foto + kotak dari mask (dibuat oleh tools/build_photos.py)
+assets/photos/          foto terpilih dari Wound Image Dataset dan overlay mask-nya
+assets/data.js          ikon, aturan triase, data contoh
+assets/app.js           logika aplikasi (peran pasien & nakes)
+tools/build_photos.py   menyalin & memproses foto dari Wound Image Dataset
 ```
