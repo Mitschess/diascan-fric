@@ -106,15 +106,15 @@
   }
   const HEAL_INFO = {
     awal: { chip: 't-blue', label: 'Target dibuat', tone: 'green', order: 3,
-      msg: 'Foto awal tercatat. Sistem membuat target penyembuhan untuk 4 minggu ke depan. Pindai lagi minggu depan di hari yang sama.' },
+      msg: `Foto awal tercatat. Sistem membuat target penyembuhan untuk ${HEAL.weeks} minggu ke depan. Pindai lagi minggu depan di hari yang sama.` },
     sesuai: { chip: 't-green', label: 'Sesuai target', tone: 'green', order: 2,
       msg: 'Luka mengecil sesuai target. Lanjutkan perawatan dan pindai lagi minggu depan di hari yang sama.' },
     waspada: { chip: 't-amber', label: 'Waspada', tone: 'amber', order: 1,
-      msg: 'Luka mengecil lebih lambat dari target. Disarankan kontrol ke Puskesmas minggu ini, tidak perlu menunggu minggu ke-4.' },
+      msg: `Luka mengecil lebih lambat dari target. Disarankan kontrol ke Puskesmas minggu ini, tidak perlu menunggu minggu ke-${HEAL.weeks}.` },
     rujuk: { chip: 't-red', label: 'Disarankan rujuk', tone: 'red', order: 0,
-      msg: 'Dalam 4 minggu luas luka turun kurang dari 50%. Sistem menyarankan rujukan ke rumah sakit; tenaga kesehatan akan menindaklanjuti.' },
+      msg: `Dalam ${HEAL.weeks} minggu luas luka turun kurang dari 50%. Sistem menyarankan rujukan ke rumah sakit; tenaga kesehatan akan menindaklanjuti.` },
     tercapai: { chip: 't-green', label: 'Patokan tercapai', tone: 'green', order: 4,
-      msg: 'Luas luka turun ≥ 50% dalam 4 minggu, sesuai patokan penyembuhan. Lanjutkan perawatan sampai luka menutup.' },
+      msg: `Luas luka turun ≥ 50% dalam ${HEAL.weeks} minggu, sesuai patokan penyembuhan. Lanjutkan perawatan sampai luka menutup.` },
   };
 
   // ---------- Jalur darurat (bisa kapan saja, tidak dihitung dalam tren) ----------
@@ -204,7 +204,7 @@
       patients,
       scans,
       notes: [
-        { id: 'n1', patientId: 'p2', author: 'dr. Rina Pratiwi', text: 'Luka mengecil lebih lambat dari target. Kurangi tekanan pada kaki kanan, ganti balutan setiap hari, dan pindai lagi tepat minggu depan. Bila minggu ke-4 belum turun separuh, kita bahas rujukan.', date: at(6, 14, 20), read: true },
+        { id: 'n1', patientId: 'p2', author: 'dr. Rina Pratiwi', text: `Luka mengecil lebih lambat dari target. Kurangi tekanan pada kaki kanan, ganti balutan setiap hari, dan pindai lagi tepat minggu depan. Bila minggu ke-${HEAL.weeks} belum turun separuh, kita bahas rujukan.`, date: at(6, 14, 20), read: true },
       ],
       referrals: [
         { id: 'r1', patientId: 'p7', scanId: null, hospital: 'RSUD Kota Sukamaju', urgency: 'Terjadwal', reason: 'Evaluasi vaskular (dugaan penyakit arteri perifer)', date: at(30, 10, 0), status: 'Selesai' },

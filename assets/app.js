@@ -80,7 +80,7 @@
   const healChip = st => `<span class="chip ${HEAL_INFO[st].chip}">${HEAL_INFO[st].label}</span>`;
   const pctTxt = v => Math.round(v * 100) + '%';
   function healReason(p) {
-    if (p.status === 'awal') return 'Foto awal · target turun 50% dalam 4 minggu';
+    if (p.status === 'awal') return `Foto awal · target turun 50% dalam ${HEAL.weeks} minggu`;
     if (p.red < 0) return `Membesar ${pctTxt(-p.red)} dari foto awal (target turun ${pctTxt(p.tgt)})`;
     return `Turun ${pctTxt(p.red)} dari foto awal (target ${pctTxt(p.tgt)})`;
   }
@@ -91,7 +91,8 @@
     if (k > 1) return `${DAYS[d.getDay()]}, ${shortDate(d.toISOString())} (${k} hari lagi)`;
     return `Terlambat ${-k} hari`;
   }
-  const weekLabel = w => w >= HEAL.weeks ? `Minggu ke-${w} · titik keputusan` : `Minggu ke-${w} dari ${HEAL.weeks}`;
+  const weekLabel = w => w > HEAL.weeks ? `Minggu ke-${w} · setelah titik keputusan (minggu ke-${HEAL.weeks})`
+    : w === HEAL.weeks ? `Minggu ke-${w} · titik keputusan` : `Minggu ke-${w} dari ${HEAL.weeks}`;
   function toast(msg, icon = 'check') {
     const el = document.createElement('div');
     el.className = 'toast'; el.innerHTML = ic(icon, 16, 2.4) + '<span>' + esc(msg) + '</span>';
@@ -319,10 +320,10 @@
   function healCard() {
     const t = trackOf(S.me);
     if (!t) return `<section class="card heal"><b style="font-size:15px">Pemantauan penyembuhan</b>
-      <p class="small muted">Belum ada luka yang dipantau. Bila ada luka terbuka, foto pertama menjadi minggu ke-0 dan sistem membuat target penyembuhan 4 minggu.</p>${urgentBtn()}</section>`;
+      <p class="small muted">Belum ada luka yang dipantau. Bila ada luka terbuka, foto pertama menjadi minggu ke-0 dan sistem membuat target penyembuhan ${HEAL.weeks} minggu.</p>${urgentBtn()}</section>`;
     const info = HEAL_INFO[t.status], due = -dayDiff(t.next.toISOString()) <= 0;
     return `<section class="card heal">
-      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><div><span class="small muted" style="font-weight:700">Pemantauan 4 minggu · kaki ${t.foot.toLowerCase()}</span><b style="display:block;font-size:16px">${weekLabel(t.week)}</b></div>${healChip(t.status)}</div>
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><div><span class="small muted" style="font-weight:700">Pemantauan ${HEAL.weeks} minggu · kaki ${t.foot.toLowerCase()}</span><b style="display:block;font-size:16px">${weekLabel(t.week)}</b></div>${healChip(t.status)}</div>
       ${weekSteps(t)}
       <div class="advice ${info.tone}">${ic(info.tone === 'green' ? 'check' : 'alert', 18, 2.2)}<p><b>${healReason(t.last)}.</b> ${info.msg}</p></div>
       <div class="due"><span class="si">${ic('calendar', 17, 2.1)}</span><span class="grow"><span class="small muted" style="display:block">Pindai mingguan berikutnya · minggu ke-${t.nextWeek}${t.nextWeek === HEAL.weeks ? ' (titik keputusan)' : ''}</span><b style="font-size:13.5px">${dueLabel(t.next)}</b></span>${due ? `<button class="btn btn-primary btn-sm" data-act="pgo" data-v="scan">${ic('camera', 15, 2.2)}Pindai</button>` : ''}</div>
@@ -508,7 +509,7 @@
       <text x="${x(L.w)}" y="${y(L.v) - 10}" font-size="10" text-anchor="middle" font-weight="700" style="fill:var(--ink-2)">${fmtNum(L.v)}</text>
     </svg>`;
   }
-  const healLegend = () => `<div class="legend"><span><i style="background:var(--accent-2)"></i>Luas aktual</span><span><i class="dash"></i>Target: turun 50% di minggu ke-4</span><span><i style="background:var(--amber)"></i>Waspada</span><span><i style="background:var(--red)"></i>Disarankan rujuk</span></div>`;
+  const healLegend = () => `<div class="legend"><span><i style="background:var(--accent-2)"></i>Luas aktual</span><span><i class="dash"></i>Target: turun 50% di minggu ke-${HEAL.weeks}</span><span><i style="background:var(--amber)"></i>Waspada</span><span><i style="background:var(--red)"></i>Disarankan rujuk</span></div>`;
   // Lima kotak minggu 0–4, diwarnai menurut status pindaian minggu tersebut.
   function weekSteps(t) {
     return `<div class="wk" role="img" aria-label="${weekLabel(t.week)}">${Array.from({ length: HEAL.weeks + 1 }, (_, w) => {
@@ -547,11 +548,11 @@
         ${t ? `<p class="small" style="padding:0 4px">${healReason(t.last)} · foto awal ${fmtArea(t.a0)} (${shortDate(t.base)})</p>` : ''}
         ${healChart(t, 420, 200)}${t ? healLegend() : ''}</div>
         <div class="card rules"><b style="font-size:13.5px">Cara sistem menilai</b>
-          <ol><li><b>Minggu ke-0:</b> luas dari foto awal dicatat, lalu sistem membuat target: luas turun 50% di minggu ke-4.</li>
-          <li><b>Minggu ke-1 sampai ke-3:</b> pindai seminggu sekali di hari yang sama. Status menjadi <b>Waspada</b> bila luka membesar, atau mulai minggu ke-2 penurunannya kurang dari separuh target. Anda disarankan kontrol ke Puskesmas tanpa menunggu minggu ke-4.</li>
-          <li><b>Minggu ke-4 (titik keputusan):</b> bila penurunan kurang dari 50%, sistem menyarankan rujukan.</li>
+          <ol><li><b>Minggu ke-0:</b> luas dari foto awal dicatat, lalu sistem membuat target: luas turun 50% di minggu ke-${HEAL.weeks}.</li>
+          <li><b>Minggu ke-1 sampai ke-${HEAL.weeks - 1}:</b> pindai seminggu sekali di hari yang sama. Status menjadi <b>Waspada</b> bila luka membesar, atau mulai minggu ke-2 penurunannya kurang dari separuh target. Anda disarankan kontrol ke Puskesmas tanpa menunggu minggu ke-${HEAL.weeks}.</li>
+          <li><b>Minggu ke-${HEAL.weeks} (titik keputusan):</b> bila penurunan kurang dari 50%, sistem menyarankan rujukan.</li>
           <li><b>Jalur darurat:</b> foto keluhan (bau, nanah, kemerahan meluas, demam) bisa dikirim kapan saja, dicek untuk tanda bahaya, dan tidak dihitung dalam grafik.</li></ol>
-          <p class="small muted">Patokan 50% dalam 4 minggu berasal dari penelitian ulkus kaki diabetik (Sheehan dkk., 2003) dan pedoman IWGDF. Keputusan akhir tetap di tangan tenaga kesehatan.</p></div>`;
+          <p class="small muted">Patokan 50% dalam ${HEAL.weeks} minggu berasal dari penelitian ulkus kaki diabetik (Sheehan dkk., 2003) dan pedoman IWGDF. Keputusan akhir tetap di tangan tenaga kesehatan.</p></div>`;
     } else if (U.histTab === 'sev') {
       body = `<div class="card" style="padding:14px 14px 10px;border-radius:18px"><div class="small muted" style="font-weight:700;padding:0 4px 6px">Estimasi derajat Wagner per pindaian</div>${sevChart(mine, 420, 180)}</div>`;
     } else {
@@ -633,7 +634,7 @@
           <p>Prototipe ini memperlihatkan alur DiaScan: memindai kaki, mengirim hasil, dan ditinjau tenaga kesehatan.</p>
           <p>Foto pasien contoh adalah foto asli dari Wound Image Dataset (foto luka beserta mask segmentasinya, dan foto kaki normal). Kotak deteksi dihitung dari mask anotasi dataset; tombol <b>Tampilkan mask</b> memperlihatkan area lukanya.</p>
           <p>Belum ada model YOLO terlatih di dalamnya. Foto dari kamera atau Galeri dianalisis dengan pencarian area kemerahan sederhana.</p>
-          <p>Pemantauan 4 minggu membandingkan luas luka tiap minggu dengan target turun 50% di minggu ke-4. Foto tiap minggu berasal dari satu pasien yang sama di dataset, tetapi angka luasnya adalah data contoh. Tombol rana mencatat luas yang mengecil 12% dari pindai mingguan sebelumnya.</p>
+          <p>Pemantauan ${HEAL.weeks} minggu membandingkan luas luka tiap minggu dengan target turun 50% di minggu ke-${HEAL.weeks}. Foto tiap minggu berasal dari satu pasien yang sama di dataset, tetapi angka luasnya adalah data contoh. Tombol rana mencatat luas yang mengecil 12% dari pindai mingguan sebelumnya.</p>
           <p>Semua nama dan data adalah contoh. Data tersimpan hanya di peramban Anda.</p></div><button class="btn btn-primary" data-act="close-sheet">Tutup</button>`;
         break;
       case 'urgent':
@@ -691,7 +692,7 @@
 
   function qTable(list, empty) {
     if (!list.length) return `<div class="empty">${ic('search', 24)}<b>${empty}</b></div>`;
-    return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pasien · lokasi luka</th><th>Temuan AI</th><th>Tren 4 minggu</th><th>Wagner</th><th>Prioritas</th><th>Waktu</th><th>Status</th></tr></thead><tbody>
+    return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pasien · lokasi luka</th><th>Temuan AI</th><th>Tren ${HEAL.weeks} minggu</th><th>Wagner</th><th>Prioritas</th><th>Waktu</th><th>Status</th></tr></thead><tbody>
       ${list.map(s => { const p = patient(s.patientId), st = STATUS[s.status]; return `<tr data-act="sel" data-id="${s.id}" aria-selected="${U.sel === s.id}" tabindex="0">
         <td><div class="pt"><span class="avatar">${initials(p.name)}</span><div><b>${esc(p.name)}${s.mine && s.status === 'Menunggu' ? '<span class="new-badge">BARU</span>' : ''}</b><span>${p.age} th · ${s.foot} · ${esc(s.site)}</span></div></div></td>
         <td><div class="row" style="gap:4px">${findingChips(s)}</div></td>
@@ -715,7 +716,7 @@
       <p class="small muted">Tidak dihitung dalam tren luas luka.</p></div>`;
     const t = trackOf(s.patientId), hp = t && t.pts.find(p => p.id === s.id);
     if (!hp) return '';
-    return `<div class="hbox"><div class="row" style="justify-content:space-between;gap:8px"><b style="font-size:13px">Tren 4 minggu · ${weekLabel(hp.wk)}</b>${healChip(hp.status)}</div>
+    return `<div class="hbox"><div class="row" style="justify-content:space-between;gap:8px"><b style="font-size:13px">Tren ${HEAL.weeks} minggu · ${weekLabel(hp.wk)}</b>${healChip(hp.status)}</div>
       ${healChart(t, 340, 150)}<p class="small">${healReason(hp)} · foto awal ${fmtArea(t.a0)} (${shortDate(t.base)})</p></div>`;
   }
   function preview(s) {
@@ -812,11 +813,11 @@
 
   function healPanel(tracks) {
     const rows = tracks.slice().sort((a, b) => (HEAL_INFO[a.t.status].order - HEAL_INFO[b.t.status].order) || a.p.name.localeCompare(b.p.name));
-    return `<div class="card" style="overflow:hidden;min-width:0"><div class="panel-h"><div><h2>Pemantauan Penyembuhan 4 Minggu</h2><p>Luas luka tiap minggu dibandingkan target turun 50% di minggu ke-4</p></div></div>
+    return `<div class="card" style="overflow:hidden;min-width:0"><div class="panel-h"><div><h2>Pemantauan Penyembuhan ${HEAL.weeks} Minggu</h2><p>Luas luka tiap minggu dibandingkan target turun 50% di minggu ke-${HEAL.weeks}</p></div></div>
       ${rows.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pasien · lokasi luka</th><th>Minggu</th><th>Luas awal → terakhir</th><th>Perubahan / target</th><th>Tren</th><th>Status</th><th>Pindai berikutnya</th></tr></thead><tbody>
       ${rows.map(({ p, t }) => `<tr data-act="open-p" data-id="${p.id}" tabindex="0">
         <td><div class="pt"><span class="avatar">${initials(p.name)}</span><div><b>${esc(p.name)}</b><span>${p.age} th · ${t.foot} · ${esc(t.site)}</span></div></div></td>
-        <td>${t.week >= HEAL.weeks ? `<b>${t.week}</b> <span class="muted">· keputusan</span>` : `<b>${t.week}</b> <span class="muted">/ ${HEAL.weeks}</span>`}</td>
+        <td><b>${t.week}</b> <span class="muted">${t.week > HEAL.weeks ? `· setelah keputusan mg ${HEAL.weeks}` : t.week === HEAL.weeks ? '· keputusan' : '/ ' + HEAL.weeks}</span></td>
         <td>${fmtNum(t.a0)} → <b>${fmtArea(t.last.v)}</b></td>
         <td>${t.last.red < 0 ? `<b style="color:var(--red)">+${pctTxt(-t.last.red)}</b>` : `<b>−${pctTxt(t.last.red)}</b>`} <span class="muted">/ −${pctTxt(t.last.tgt)}</span></td>
         <td>${spark(p.id)}</td>
@@ -863,7 +864,7 @@
       <div class="split">
         <div class="card pcard" style="display:grid;gap:14px">
           <div class="row" style="justify-content:space-between;flex-wrap:wrap"><div class="pt"><span class="avatar" style="width:44px;height:44px;font-size:14px">${initials(sp.name)}</span><div><b style="font-size:16px">${esc(sp.name)}</b><span>${sp.age} th · ${sp.sex === 'L' ? 'Laki-laki' : 'Perempuan'} · ${sp.dm}</span></div></div>${last ? `<span class="chip ${PRI_CHIP[last.priority]}">Risiko ${last.priority.toLowerCase()}</span>` : ''}</div>
-          <div><div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px"><h2 style="font-size:14px;font-weight:800">Pemantauan 4 minggu${t ? ' · kaki ' + t.foot.toLowerCase() + ' · ' + esc(t.site) : ''}</h2>${t ? healChip(t.status) : ''}</div>
+          <div><div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px"><h2 style="font-size:14px;font-weight:800">Pemantauan ${HEAL.weeks} minggu${t ? ' · kaki ' + t.foot.toLowerCase() + ' · ' + esc(t.site) : ''}</h2>${t ? healChip(t.status) : ''}</div>
             ${t ? `<p class="small muted">${weekLabel(t.week)} · ${healReason(t.last)} · foto awal ${fmtArea(t.a0)} (${shortDate(t.base)}) · pindai berikutnya ${dueLabel(t.next).toLowerCase()}</p>` : ''}
             ${healChart(t, 560, 200)}${t ? healLegend() : ''}</div>
           <div><h2 style="font-size:14px;font-weight:800;margin-bottom:8px">Riwayat pindaian (${list.length})</h2>
@@ -946,7 +947,7 @@
         <div class="field"><label for="refReason">Alasan rujukan</label><textarea class="input" id="refReason" rows="3">${esc(reason)}</textarea></div>
         <div class="row" style="justify-content:flex-end"><button type="button" class="btn btn-ghost" data-act="close-modal">Batal</button><button class="btn btn-danger" type="submit">${ic('hospital', 15, 2.1)}Buat rujukan</button></div></form>`;
     } else if (m.type === 'export') {
-      const rows = [['Tanggal', 'Waktu', 'Pasien', 'Usia', 'Desa', 'Kaki', 'Lokasi', 'Temuan', 'Wagner (est.)', 'Prioritas', 'Luas (cm2)', 'Tren 4 minggu', 'Status']]
+      const rows = [['Tanggal', 'Waktu', 'Pasien', 'Usia', 'Desa', 'Kaki', 'Lokasi', 'Temuan', 'Wagner (est.)', 'Prioritas', 'Luas (cm2)', `Tren ${HEAL.weeks} minggu`, 'Status']]
         .concat(queue().map(s => { const p = patient(s.patientId); return [fmtDate(s.date), fmtTime(s.date), p.name, p.age, p.village, s.foot, s.site, findingsText(s), s.wagner ?? '', s.priority, s.area ? fmtNum(s.area) : '', s.urgent ? 'Jalur darurat' : (hp => hp ? `${HEAL_INFO[hp.status].label} (minggu ${hp.wk})` : '')(pointOf(s)), STATUS[s.status].label]; }));
       const csv = rows.map(r => r.map(v => /[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\n');
       inner = `<h3 id="mTitle">Ekspor laporan</h3><p class="small muted">${rows.length - 1} pindaian dalam format CSV. Salin lalu tempel ke Excel atau Google Sheets.</p>
@@ -1090,7 +1091,7 @@
       const txt = U.noteDraft.trim();
       const hp = pointOf(s);
       const auto = s.priority === 'Tinggi' ? 'Mohon datang ke Puskesmas hari ini untuk perawatan luka.'
-        : hp && hp.status === 'rujuk' ? 'Penurunan luas luka belum mencapai patokan 4 minggu. Mohon datang ke Puskesmas untuk membahas rujukan.'
+        : hp && hp.status === 'rujuk' ? `Penurunan luas luka belum mencapai patokan ${HEAL.weeks} minggu. Mohon datang ke Puskesmas untuk membahas rujukan.`
         : hp && hp.status === 'waspada' ? 'Luka mengecil lebih lambat dari target. Mohon kontrol ke Puskesmas minggu ini.'
         : 'Lanjutkan perawatan sesuai anjuran dan pindai kembali minggu depan di hari yang sama.';
       addNote(s.patientId, s.id, txt || 'Hasil pindai Anda sudah diperiksa. ' + auto);
